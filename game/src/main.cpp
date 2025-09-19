@@ -11,48 +11,60 @@ See documentation here: https://www.raylib.com/, and examples here: https://www.
 const unsigned int TARGET_FPS = 50;
 float dt = 1.0f / TARGET_FPS;
 float time = 0;
-float x = 500;
-float y = 500;
-float frequency = 1.0f;
-float amplitude = 100.0f;
+
+// Launch 
+Vector2 launchPosition = { 200, 500 };
+float launchAngle = 45.0f; 
+float launchSpeed = 100.0f;
+
+Vector2 velocity = { 0, 0 };
 
 void Update()
 {
     dt = 1.0f / TARGET_FPS;
     time += dt;
 
-	x = x + (-sin(time * frequency)) * frequency * amplitude * dt;
-    y = y + (cos (time * frequency)) * frequency * amplitude * dt;
+    // Calculate velocity 
+    float rad = launchAngle * DEG2RAD;
+    velocity.x = cos(rad) * launchSpeed;
+    velocity.y = -sin(rad) * launchSpeed; 
 
+ 
 }
+
 void Draw()
 {
     BeginDrawing();
     ClearBackground(BLACK);
-    DrawText("game 2005 101541841 Amir", 10, float(GetScreenHeight() - 30), 20, LIGHTGRAY);
 
-    GuiSliderBar(Rectangle{ 60, 5, 1000, 10 }, "Time", TextFormat("%.2f", time), &time, 0, 240);
-    DrawText("Time", GetScreenWidth() - 150, 10, 30, LIGHTGRAY);
+    DrawText("Alpha testing for Angry Bird ", 10, GetScreenHeight() - 30, 20, LIGHTGRAY);
 
-	DrawCircle(x, y, 70, RED);
-	DrawCircle(500 + cos(time * frequency) * amplitude, 500 + sin(time * frequency) * amplitude, 70, BLUE);
+    // GUI controls
+    GuiSliderBar(Rectangle{ 60, 5, 200, 10 }, "Launch X", TextFormat("%.0f", launchPosition.x), &launchPosition.x, 0, GetScreenWidth());
+    GuiSliderBar(Rectangle{ 60, 25, 200, 10 }, "Launch Y", TextFormat("%.0f", launchPosition.y), &launchPosition.y, 0, GetScreenHeight());
+    GuiSliderBar(Rectangle{ 60, 45, 200, 10 }, "Angle", TextFormat("%.1f", launchAngle), &launchAngle, 0, 360);
+    GuiSliderBar(Rectangle{ 60, 65, 200, 10 }, "Speed", TextFormat("%.1f", launchSpeed), &launchSpeed, 0, 1000);
+
+    // Draw launch position
+    DrawCircleV(launchPosition, 20, PINK);
+    float visualScale = 0.2f; // Adjust this value for best visual effect
+    Vector2 velocityVector = Vector2Scale(Vector2Normalize(velocity), launchSpeed * visualScale);
+    Vector2 endPoint = Vector2Add(launchPosition, velocityVector);
+    DrawLineV(launchPosition, endPoint, RED);
+    DrawText(TextFormat("Velocity: (%.1f, %.1f)", velocity.x, velocity.y), 60, 90, 20, LIGHTGRAY);
 
     EndDrawing();
-
 }
-
-
-
 
 int main()
 {
-    InitWindow(1200, 800, "game 2005 101541841 Amir ");
+    InitWindow(1200, 800, "Alpha testing for Angry Bird");
     SetTargetFPS(TARGET_FPS);
 
     while (!WindowShouldClose())
     {
-		Update();
-		Draw();   
+        Update();
+        Draw();
     }
 
     CloseWindow();
