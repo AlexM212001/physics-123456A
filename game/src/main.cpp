@@ -34,9 +34,17 @@ void Update()
 
  
 }
+enum phisicShape
+{
+    CIRCLE,
+    HALFSPACE,
+};
+
 class PhysicObject
 {
 public:
+
+	bool isStatic = false;
     Vector2 position = { 0,0 };
     Vector2 velocity = { 0,0 };
     float mass = 1;
@@ -50,10 +58,13 @@ public:
 		DrawText(name.c_str(), position.x, position.y, 12, LIGHTGRAY);
 		
 	}
+
+	virtual phisicShape Shape() = 0;
+	
   
 };
 
-class PhysicBox : public PhysicObject
+/*class PhysicBox : public PhysicObject
 {
    // Vector2 position = { 0,0 };
     //Vector2 velocity = { 0,0 };
@@ -73,7 +84,9 @@ public:
 		DrawText(name.c_str(), position.x, position.y, 12, LIGHTGRAY);
 		DrawLineEx(position, position + velocity, 1, color);
 	}
-};
+};*/
+
+
 class PhysicCircle : public PhysicObject
 {
 public:
@@ -87,6 +100,52 @@ public:
 
         DrawLineEx(position, position + velocity, 1, color);
     }
+
+    phisicShape Shape() override
+    {
+        return CIRCLE;
+    }
+};
+
+class PhysicHalfSpace : public PhysicObject
+{
+private:
+        float rotation =0;
+        Vector2 normal = {0,-1 };
+public:
+	void setRotationDegrees(float RotationInDegrees)
+	{
+		rotation = RotationInDegrees;
+		normal = Vector2Rotate({ 0,-1 },rotation * DEG2RAD);
+	}
+    float getRoatation()
+    {
+		return rotation;
+
+    }
+    Vector2 getNormal()
+    {
+		return normal;
+        
+    }
+
+
+		void draw() override
+		{
+            DrawCircle(position.x, position.y, 8, color);
+            DrawLineEx(position, position + velocity, 1, color);
+
+            //Surfface
+			Vector2 parallelToSurface = Vector2Rotate(normal, PI * 0.5f);
+			DrawLineEx(position - parallelToSurface * 3000, position + parallelToSurface * 3000, 1, color);
+		}
+
+		phisicShape Shape() override
+		{
+			return HALFSPACE;
+		}
+
+		
 };
 
 bool circleOverlaps(PhysicCircle*circleA, PhysicCircle*circleB)
@@ -104,6 +163,20 @@ bool circleOverlaps(PhysicCircle*circleA, PhysicCircle*circleB)
    
 }
 
+bool circleHalfSpaceOverlaps(PhysicCircle* circle, PhysicHalfSpace* halfspace)
+{
+	Vector2 displacementFromHSPosToCircle = circle->position - halfspace->position;
+	float distance = Vector2DotProduct(displacementFromHSPosToCircle, halfspace->getNormal());
+
+	DrawLineEx(circle->position, halfspace->position, 1, RED);
+	Vector2 midpoint = halfspace->position + displacementFromHSPosToCircle * 0.5f ;
+
+	DrawText(TextFormat("D: %6.0f", distance), midpoint.x, midpoint.y, 20, LIGHTGRAY);
+
+
+    return distance < circle->radius;
+}
+
 
 class PhysicWorld
 {
@@ -111,7 +184,7 @@ private:
     unsigned int ObjectCount = 0;
 public:
     std::vector<PhysicObject*> Object; // All objects in physics simulation
-    std::vector<PhysicBox*> Boxes;
+    //  std::vector<PhysicBox*> Boxes;
     Vector2 accelerationGravity = { 0, 9 };
 
     void add(PhysicObject* newObject) // Add to physics simulation
@@ -121,26 +194,75 @@ public:
         ObjectCount++;
     }
 
-    
+
     void update()
     {
         for (int i = 0; i < Object.size(); i++)
         {
-			PhysicObject* obj = Object[i];
+            PhysicObject* obj = Object[i];
+
+            if (obj->isStatic) continue;
 
 
             obj->position = obj->position + obj->velocity * dt;
-           
+
 
             obj->velocity = obj->velocity + accelerationGravity * dt;
         }
-		checkCollisions();
+        checkCollisions();
     }
 
     void checkCollisions()
     {
+		for (int i = 0; i < Object.size(); i++)
+        {
+			Object[i]->color = GREEN;
+            
+        }
+
+
+        for (int i = 0; i < Object.size(); i++)
+        {
+            for (int j = i + 1; j < Object.size(); j++)
+            {
+                PhysicObject* objectpointerA = Object[i];
+                PhysicObject* objectpointerB = Object[j];
+
+                phisicShape shapeA = objectpointerA->Shape();
+                phisicShape shapeB = objectpointerB->Shape();
+
+
+				bool didCollide = false;
+
+
+                if (shapeA == CIRCLE && shapeB == CIRCLE)
+                {
+					didCollide = circleOverlaps((PhysicCircle*)objectpointerA, (PhysicCircle*)objectpointerB);
+                    
+                    
+                }
+                else if (shapeA == CIRCLE && shapeB == HALFSPACE)
+                {
+                   didCollide =  circleHalfSpaceOverlaps((PhysicCircle*)objectpointerA, (PhysicHalfSpace*)objectpointerB);
+                }
+                else if (shapeA == HALFSPACE && shapeB == CIRCLE)
+                {
+				  didCollide =	circleHalfSpaceOverlaps((PhysicCircle*)objectpointerB, (PhysicHalfSpace*)objectpointerA);
+                }
+                if (didCollide)
+                {
+                    objectpointerA->color = RED;
+                    objectpointerB->color = RED;
+                }
+            }
+        }
+    }
+};
+
+
+
 		//Reset all colors
-        for (auto& obj : Object) {
+      /*  for (auto& obj : Object) {
             PhysicCircle* circle = dynamic_cast<PhysicCircle*>(obj);
             if (circle) circle->color = circle->originalColor;
         }
@@ -149,6 +271,8 @@ public:
         {
             PhysicCircle* circlePointerA = dynamic_cast<PhysicCircle*>(Object[i]);
             if (!circlePointerA) continue;
+
+
 
 
             for (int j = i + 1; j < Object.size(); j++)
@@ -161,14 +285,21 @@ public:
                     circlePointerA->color = RED;
                     circlePointerB->color = RED;
                 }
+
+                
             }
 
-
-        }
+            //if (circleHalfSpaceOverlaps(circlePointerA, &halfspace))
+            //{
+              //  circlePointerA->color = RED;
+            //}*/
+        //}
         
-    }
-};
+   // }
+//};
 PhysicWorld world;
+PhysicHalfSpace halfspace;
+
 //Remove objects offscreen
 void cleanup()
 {
@@ -227,11 +358,11 @@ void Draw()
     DrawText("Amir Abolhassani 101541841", 10, float(GetScreenHeight() - 30), 20, LIGHTGRAY);
 
     
-    GuiSliderBar(Rectangle{ 60, 5, 200, 10 }, "Launch X", TextFormat("%.0f", launchPosition.x), &launchPosition.x, 0, GetScreenWidth());
-    GuiSliderBar(Rectangle{ 60, 25, 200, 10 }, "Launch Y", TextFormat("%.0f", launchPosition.y), &launchPosition.y, 0, GetScreenHeight());
-    GuiSliderBar(Rectangle{ 60, 45, 200, 10 }, "Angle", TextFormat("%.1f", launchAngle), &launchAngle, 0, 360);
-    GuiSliderBar(Rectangle{ 60, 65, 200, 10 }, "Speed", TextFormat("%.1f", launchSpeed), &launchSpeed, 0, 1000);
-    GuiSliderBar(Rectangle{ 60,85,200, 10}, "Gravity Y", TextFormat("Gravity Y: %.0f Px/sec^2", world.accelerationGravity.y), &world.accelerationGravity.y, -1000, 1000);
+    GuiSliderBar(Rectangle{ 70, 5, 200, 10 }, "Launch X", TextFormat("%.0f", launchPosition.x), &launchPosition.x, 0, GetScreenWidth());
+    GuiSliderBar(Rectangle{ 70, 25, 200, 10 }, "Launch Y", TextFormat("%.0f", launchPosition.y), &launchPosition.y, 0, GetScreenHeight());
+    GuiSliderBar(Rectangle{ 70, 45, 200, 10 }, "Angle", TextFormat("%.1f", launchAngle), &launchAngle, 0, 360);
+    GuiSliderBar(Rectangle{ 70, 65, 200, 10 }, "Speed", TextFormat("%.1f", launchSpeed), &launchSpeed, 0, 1000);
+    GuiSliderBar(Rectangle{ 70,85,200, 10}, "Gravity Y", TextFormat("Gravity Y: %.0f Px/sec^2", world.accelerationGravity.y), &world.accelerationGravity.y, -1000, 1000);
 
     DrawText(TextFormat("Object: %i", world.Object.size()), 10, 160, 30, LIGHTGRAY);
 
@@ -240,11 +371,21 @@ void Draw()
     Vector2 velocityVec = { launchSpeed * cos(launchAngle * DEG2RAD), -launchSpeed * sin(launchAngle * DEG2RAD) };
     DrawLineEx(launchPosition, Vector2Add(launchPosition, velocityVec), 3, RED);
 
+	//Halfspace surface  
+    GuiSliderBar(Rectangle{ 70, 105, 200, 10 }, "HalfSpace x", TextFormat("%.0f", halfspace.position.x), &halfspace.position.x, 0, GetScreenWidth());
+    GuiSliderBar(Rectangle{ 70, 125, 200, 10 }, "HalfSpace Y", TextFormat("%.0f", halfspace.position.y), &halfspace.position.y, 0, GetScreenHeight());
+
+	float halfSpaceRoatation = halfspace.getRoatation();
+    GuiSliderBar(Rectangle{ 70, 145, 200, 10 }, "HS Roatition", TextFormat("%.0f", halfspace.getRoatation()), &halfSpaceRoatation, -360,360 );
+
+	halfspace.setRotationDegrees(halfSpaceRoatation);
+
     //Draw all physics objects!
     for (int i = 0; i < world.Object.size(); i++)
     {
         world.Object[i]->draw();
     }
+	halfspace.draw();
 
     EndDrawing();
 
@@ -254,6 +395,9 @@ int main()
 {
     InitWindow(InitialWidth, InitialHeight, "Angry bird beta, Amir Abolhassani 101541841");
     SetTargetFPS(TARGET_FPS);
+	halfspace.isStatic = true;
+	halfspace.position = { 500, 700 };
+	world.add(&halfspace);
 
     while (!WindowShouldClose()) // Loops TARGET_FPS times per second
     {
