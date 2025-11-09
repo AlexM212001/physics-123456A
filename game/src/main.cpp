@@ -153,6 +153,10 @@ bool circleOverlaps(PhysicCircle*circleA, PhysicCircle*circleB)
 	Vector2 displacementFromAToB = circleB->position - circleA->position;
 	float distance = Vector2Length(displacementFromAToB);
 	float sumOfRadii = circleA->radius + circleB->radius;
+	float overlap = sumOfRadii - distance;
+	//Vector2 normalAtoB = displacementFromAToB / distance;
+	//Vector2 mtv = normalAtoB * overlap;
+
 	if (sumOfRadii> distance)
 	{
 		return true;
@@ -162,6 +166,30 @@ bool circleOverlaps(PhysicCircle*circleA, PhysicCircle*circleB)
 
    
 }
+
+bool circleColisionResponse(PhysicCircle* circleA, PhysicCircle* circleB)
+{
+    Vector2 displacementFromAToB = circleB->position - circleA->position;
+    float distance = Vector2Length(displacementFromAToB);
+    float sumOfRadii = circleA->radius + circleB->radius;
+    float overlap = sumOfRadii - distance;
+
+    if (overlap > 0)
+    {
+    Vector2 normalAtoB = displacementFromAToB / distance;
+    Vector2 mtv = normalAtoB * overlap;
+        circleA->position -= mtv * 0.5f;
+        circleB->position += mtv * 0.5f;
+
+        return true;
+    }
+    else
+        return false;
+
+
+}
+
+
 
 bool circleHalfSpaceOverlaps(PhysicCircle* circle, PhysicHalfSpace* halfspace)
 {
@@ -175,6 +203,34 @@ bool circleHalfSpaceOverlaps(PhysicCircle* circle, PhysicHalfSpace* halfspace)
 
 
     return distance < circle->radius;
+
+}
+
+bool circleHalfspaceCollisionResponse(PhysicCircle* circle, PhysicHalfSpace* halfspace)
+{
+    Vector2 displacementFromHSPosToCircle = circle->position - halfspace->position;
+    float distance = Vector2DotProduct(displacementFromHSPosToCircle, halfspace->getNormal());
+    Vector2 projectionDisplacementOntoNormal = halfspace->getNormal() * distance;
+    float overlap = circle->radius - distance;
+
+    if (overlap > 0)
+    {
+        Vector2 midpoint = halfspace->getNormal() * overlap;
+        circle->position += midpoint;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+    DrawLineEx(circle->position, halfspace->position, 1, RED);
+    Vector2 midpoint = halfspace->position + displacementFromHSPosToCircle * 0.5f;
+
+    DrawText(TextFormat("D: %6.0f", distance), midpoint.x, midpoint.y, 20, LIGHTGRAY);
+
+
+    return distance < circle->radius;
+
 }
 
 
@@ -237,17 +293,17 @@ public:
 
                 if (shapeA == CIRCLE && shapeB == CIRCLE)
                 {
-					didCollide = circleOverlaps((PhysicCircle*)objectpointerA, (PhysicCircle*)objectpointerB);
+					didCollide = circleColisionResponse((PhysicCircle*)objectpointerA, (PhysicCircle*)objectpointerB);
                     
                     
                 }
                 else if (shapeA == CIRCLE && shapeB == HALFSPACE)
                 {
-                   didCollide =  circleHalfSpaceOverlaps((PhysicCircle*)objectpointerA, (PhysicHalfSpace*)objectpointerB);
+                   didCollide = circleHalfspaceCollisionResponse((PhysicCircle*)objectpointerA, (PhysicHalfSpace*)objectpointerB);
                 }
                 else if (shapeA == HALFSPACE && shapeB == CIRCLE)
                 {
-				  didCollide =	circleHalfSpaceOverlaps((PhysicCircle*)objectpointerB, (PhysicHalfSpace*)objectpointerA);
+				  didCollide = circleHalfspaceCollisionResponse((PhysicCircle*)objectpointerB, (PhysicHalfSpace*)objectpointerA);
                 }
                 if (didCollide)
                 {
@@ -299,7 +355,7 @@ public:
 //};
 PhysicWorld world;
 PhysicHalfSpace halfspace;
-
+PhysicHalfSpace halfspace2;
 //Remove objects offscreen
 void cleanup()
 {
@@ -364,7 +420,7 @@ void Draw()
     GuiSliderBar(Rectangle{ 70, 65, 200, 10 }, "Speed", TextFormat("%.1f", launchSpeed), &launchSpeed, 0, 1000);
     GuiSliderBar(Rectangle{ 70,85,200, 10}, "Gravity Y", TextFormat("Gravity Y: %.0f Px/sec^2", world.accelerationGravity.y), &world.accelerationGravity.y, -1000, 1000);
 
-    DrawText(TextFormat("Object: %i", world.Object.size()), 10, 160, 30, LIGHTGRAY);
+    DrawText(TextFormat("Object: %i", world.Object.size()), 500,20, 50, LIGHTGRAY);
 
     DrawText(TextFormat("T: %6.2f", time), GetScreenWidth() - 140, 10, 30, LIGHTGRAY);
 
@@ -379,6 +435,15 @@ void Draw()
     GuiSliderBar(Rectangle{ 70, 145, 200, 10 }, "HS Roatition", TextFormat("%.0f", halfspace.getRoatation()), &halfSpaceRoatation, -360,360 );
 
 	halfspace.setRotationDegrees(halfSpaceRoatation);
+
+    //Second halfspace controls
+    GuiSliderBar(Rectangle{ 70, 165, 200, 10 }, "HalfSpace2 x", TextFormat("%.0f", halfspace2.position.x), &halfspace2.position.x, 0, GetScreenWidth());
+    GuiSliderBar(Rectangle{ 70, 185, 200, 10 }, "HalfSpace2 Y", TextFormat("%.0f", halfspace2.position.y), &halfspace2.position.y, 0, GetScreenHeight());
+
+    float halfSpace2Roatation = halfspace2.getRoatation();
+    GuiSliderBar(Rectangle{ 70, 205, 200, 10 }, "HS2 Roatition", TextFormat("%.0f", halfspace2.getRoatation()), &halfSpace2Roatation, -360, 360);
+
+    halfspace2.setRotationDegrees(halfSpace2Roatation);
 
     //Draw all physics objects!
     for (int i = 0; i < world.Object.size(); i++)
@@ -397,7 +462,12 @@ int main()
     SetTargetFPS(TARGET_FPS);
 	halfspace.isStatic = true;
 	halfspace.position = { 500, 700 };
+	halfspace.setRotationDegrees(10);
 	world.add(&halfspace);
+	halfspace2.isStatic = true;
+	halfspace2.position = { 800, 400 };
+	halfspace2.setRotationDegrees(-10);
+	world.add(&halfspace2);
 
     while (!WindowShouldClose()) // Loops TARGET_FPS times per second
     {
