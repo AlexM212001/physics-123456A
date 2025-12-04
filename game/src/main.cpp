@@ -1,7 +1,8 @@
-/*
+﻿/*
 This project uses the Raylib framework to provide us functionality for math, graphics, GUI, input etc.
 See documentation here: https://www.raylib.com/, and examples here: https://www.raylib.com/examples.html
 */
+
 
 #include "raylib.h"
 #include "raymath.h"
@@ -11,163 +12,229 @@ See documentation here: https://www.raylib.com/, and examples here: https://www.
 #include <string>
 #include <vector>
 
-const unsigned int TARGET_FPS = 50;
-float dt = 1.0f / TARGET_FPS;
+const unsigned int TARGET_FPS = 50; //frames/second
+float dt = 1.0f / TARGET_FPS;      //seconds/frame
 float time = 0;
 
-// Launch 
-Vector2 launchPosition = { 200, 500 };
-float launchAngle = 45.0f; 
-float launchSpeed = 300.0f;
-
-Vector2 velocity = { 0, 0 };
-
-void Update()
-{
-    dt = 1.0f / TARGET_FPS;
-    time += dt;
-
-    // Calculate velocity 
-  //float rad = launchAngle * DEG2RAD;
-  //velocity.x = cos(rad) * launchSpeed;
-  //velocity.y = -sin(rad) * launchSpeed; 
-
- 
-}
-enum phisicShape
+enum FizziksShape
 {
     CIRCLE,
-    HALFSPACE,
+    HALF_SPACE
 };
 
-class PhysicObject
+
+class FizziksCircle;
+class FizziksHalfspace;
+
+bool CircleCircleCollisionResponse(FizziksCircle* circleA, FizziksCircle* circleB);
+bool CircleHalfspaceCollisionResponse(FizziksCircle* circle, FizziksHalfspace* halfspace);
+
+class FizziksObjekt
 {
 public:
-
-	bool isStatic = false;
+    bool isStatic = false;
     Vector2 position = { 0,0 };
     Vector2 velocity = { 0,0 };
-    float mass = 1;
+    float mass = 1; // in kg
 
-    //float radius = 15;
-    std::string name = "object";
+    std::string name = "objekt";
     Color color = RED;
-	virtual void draw()
-	{
-		DrawCircle(position.x, position.y, 2, color);
-		DrawText(name.c_str(), position.x, position.y, 12, LIGHTGRAY);
-		
-	}
 
-	virtual phisicShape Shape() = 0;
-	
-  
+    virtual void draw()
+    {
+        DrawCircle(position.x, position.y, 2, color);
+
+    }
+
+    virtual FizziksShape Shape() = 0; // pure virtual
 };
 
-/*class PhysicBox : public PhysicObject
+class FizziksWorld
 {
-   // Vector2 position = { 0,0 };
-    //Vector2 velocity = { 0,0 };
-    //float mass = 1;
-
-	//float Hight ;
-	//float height ;
-    //std::string name = "object";
-   
-    //Color color = RED;
+private:
+    unsigned int objektCount = 0;
 public:
-	Vector2 size ;
+    std::vector<FizziksObjekt*> objekts; // Vector 2 and it controls the Y component of gravity with the slider
 
-	void draw()
-	{
-		DrawRectangleV(position, size, color);
-		DrawText(name.c_str(), position.x, position.y, 12, LIGHTGRAY);
-		DrawLineEx(position, position + velocity, 1, color);
-	}
-};*/
+    Vector2 accelerationGravity = { 0, 0 };
+
+    void add(FizziksObjekt* newObject)
+    {
+        newObject->name = std::to_string(objektCount);
+        objekts.push_back(newObject);
+        objektCount++;
+    }
 
 
-class PhysicCircle : public PhysicObject
+    void update()
+    {
+        for (int i = 0; i < objekts.size(); i++)
+        {
+            FizziksObjekt* objekt = objekts[i];
+
+
+            if (objekt->isStatic) continue;
+
+            objekt->position = objekt->position + objekt->velocity * dt;
+
+            objekt->velocity = objekt->velocity + accelerationGravity * dt;
+        }
+
+        checkCollisions();
+    }
+
+    void checkCollisions()
+    {
+
+        for (int i = 0; i < objekts.size(); i++)
+        {
+            objekts[i]->color = GREEN;
+        }
+
+        //for each object...
+        for (int i = 0; i < objekts.size(); i++)
+        {
+            //check against another object...
+            for (int j = i + 1; j < objekts.size(); j++)
+            {
+                FizziksObjekt* objektPointerA = objekts[i];
+                FizziksObjekt* objektPointerB = objekts[j];
+
+                //Ask objects what shape they are
+                FizziksShape shapeOfA = objektPointerA->Shape();
+                FizziksShape shapeOfB = objektPointerB->Shape();
+
+                bool didOverlap = false;
+
+                if (shapeOfA == CIRCLE && shapeOfB == CIRCLE)
+                {
+                    didOverlap = CircleCircleCollisionResponse((FizziksCircle*)objektPointerA, (FizziksCircle*)objektPointerB);
+                }
+                //If one is a circle and one is a halfspace
+                else if (shapeOfA == CIRCLE && shapeOfB == HALF_SPACE)
+                {
+                    didOverlap = CircleHalfspaceCollisionResponse((FizziksCircle*)objektPointerA, (FizziksHalfspace*)objektPointerB);
+                }
+                else if (shapeOfA == HALF_SPACE && shapeOfB == CIRCLE)
+                {
+                    didOverlap = CircleHalfspaceCollisionResponse((FizziksCircle*)objektPointerB, (FizziksHalfspace*)objektPointerA);
+                }
+
+                if (didOverlap)
+                {
+                    objektPointerA->color = RED;
+                    objektPointerB->color = RED;
+                }
+            }
+        }
+    }
+};
+
+float speed = 0;
+float angle = 0;
+Vector2 startPos = { 100, 500 };
+
+FizziksWorld world;
+
+
+class FizziksCircle : public FizziksObjekt
 {
 public:
-	float radius;
-    Color originalColor = GREEN;
+    float radius;
+
+    // NEW: kinetic friction coefficient and force vectors
+    float kFriction = 0.3f;
+    Vector2 normalForce = { 0, 0 };
+    Vector2 frictionForce = { 0, 0 };
+
     void draw() override
     {
         DrawCircle(position.x, position.y, radius, color);
-
         DrawText(name.c_str(), position.x, position.y, radius * 2, LIGHTGRAY);
 
-        DrawLineEx(position, position + velocity, 1, color);
+        // Colors of the line and which represents
+        Vector2 Fgravity = world.accelerationGravity * mass;
+        DrawLineEx(position, position + Fgravity * 0.05f, 2, PURPLE);
+
+
+        DrawLineEx(position, position + normalForce * 0.05f, 2, GREEN);
+
+        DrawLineEx(position, position + frictionForce * 0.05f, 2, ORANGE);
+
+
+        DrawLineEx(position, position + velocity, 1, RED);
     }
 
-    phisicShape Shape() override
+    FizziksShape Shape() override
     {
         return CIRCLE;
     }
 };
 
-class PhysicHalfSpace : public PhysicObject
+class FizziksHalfspace : public FizziksObjekt
 {
 private:
-        float rotation =0;
-        Vector2 normal = {0,-1 };
-public:
-	void setRotationDegrees(float RotationInDegrees)
-	{
-		rotation = RotationInDegrees;
-		normal = Vector2Rotate({ 0,-1 },rotation * DEG2RAD);
-	}
-    float getRoatation()
-    {
-		return rotation;
+    //FizziksObjekt::position in this context represents an arbitrary point that lies on the line.
+    float rotation = 0;
+    Vector2 normal = { 0, -1 };
 
+
+public:
+    void setRotationDegrees(float rotationInDegrees)
+    {
+        rotation = rotationInDegrees;
+        normal = Vector2Rotate({ 0, -1 }, rotation * DEG2RAD);
     }
+
+    float getRotation()
+    {
+        return rotation;
+    }
+
     Vector2 getNormal()
     {
-		return normal;
-        
+        return normal;
     }
 
+    void draw() override
+    {
 
-		void draw() override
-		{
-            DrawCircle(position.x, position.y, 8, color);
-            DrawLineEx(position, position + velocity, 1, color);
+        DrawCircle(position.x, position.y, 8, color);
 
-            //Surfface
-			Vector2 parallelToSurface = Vector2Rotate(normal, PI * 0.5f);
-			DrawLineEx(position - parallelToSurface * 3000, position + parallelToSurface * 3000, 1, color);
-		}
 
-		phisicShape Shape() override
-		{
-			return HALFSPACE;
-		}
+        DrawLineEx(position, position + normal * 30, 1, color);
 
-		
+
+        Vector2 parallelToSurface = Vector2Rotate(normal, PI * 0.5f);
+        DrawLineEx(position - parallelToSurface * 4000, position + parallelToSurface * 4000, 1, color);
+    }
+
+    FizziksShape Shape() override
+    {
+        return HALF_SPACE;
+    }
 };
 
-bool circleOverlaps(PhysicCircle*circleA, PhysicCircle*circleB)
+
+FizziksHalfspace halfspace;
+FizziksHalfspace halfspace2;
+
+bool CircleCircleOverlap(FizziksCircle* circleA, FizziksCircle* circleB) // returns true if circles are overlapping
 {
-	Vector2 displacementFromAToB = circleB->position - circleA->position;
-	float distance = Vector2Length(displacementFromAToB);
-	float sumOfRadii = circleA->radius + circleB->radius;
-	float overlap = sumOfRadii - distance;
-	//Vector2 normalAtoB = displacementFromAToB / distance;
-	//Vector2 mtv = normalAtoB * overlap;
+    Vector2 displacementFromAToB = circleB->position - circleA->position;
+    float distance = Vector2Length(displacementFromAToB);
+    float sumOfRadii = circleA->radius + circleB->radius;
 
-	if (sumOfRadii> distance)
-	{
-		return true;
-	}
+    if (sumOfRadii > distance)
+    {
+        return true;
+    }
     else
-		return false;
-
-   
+        return false;
 }
 
-bool circleColisionResponse(PhysicCircle* circleA, PhysicCircle* circleB)
+
+bool CircleCircleCollisionResponse(FizziksCircle* circleA, FizziksCircle* circleB)
 {
     Vector2 displacementFromAToB = circleB->position - circleA->position;
     float distance = Vector2Length(displacementFromAToB);
@@ -176,303 +243,256 @@ bool circleColisionResponse(PhysicCircle* circleA, PhysicCircle* circleB)
 
     if (overlap > 0)
     {
-    Vector2 normalAtoB = displacementFromAToB / distance;
-    Vector2 mtv = normalAtoB * overlap;
+        Vector2 normalAtoB;
+        if (fabsf(distance) < 0.0001f)
+            normalAtoB = { 0,1 };
+        else
+            normalAtoB = displacementFromAToB / distance;
+
+        Vector2 mtv = normalAtoB * overlap; //minimum translation vector
+
         circleA->position -= mtv * 0.5f;
         circleB->position += mtv * 0.5f;
-
         return true;
     }
     else
         return false;
-
-
 }
 
-
-
-bool circleHalfSpaceOverlaps(PhysicCircle* circle, PhysicHalfSpace* halfspace)
+bool CircleHalfspaceOverlap(FizziksCircle* circle, FizziksHalfspace* halfspace)
 {
-	Vector2 displacementFromHSPosToCircle = circle->position - halfspace->position;
-	float distance = Vector2DotProduct(displacementFromHSPosToCircle, halfspace->getNormal());
+    Vector2 displacementToCircle = circle->position - halfspace->position;
+    float dot = Vector2DotProduct(displacementToCircle, halfspace->getNormal());
 
-	DrawLineEx(circle->position, halfspace->position, 1, RED);
-	Vector2 midpoint = halfspace->position + displacementFromHSPosToCircle * 0.5f ;
+    Vector2 projectionDisplacementOntoNormal = halfspace->getNormal() * dot;
 
-	DrawText(TextFormat("D: %6.0f", distance), midpoint.x, midpoint.y, 20, LIGHTGRAY);
+    DrawLineEx(circle->position, circle->position - projectionDisplacementOntoNormal, 1, GRAY);
+    Vector2 midpoint = circle->position - projectionDisplacementOntoNormal * 0.5f;
+    DrawText(TextFormat("D: %6.0f", dot), midpoint.x, midpoint.y, 30, GRAY);
 
-
-    return distance < circle->radius;
-
+    return dot < circle->radius;
 }
 
-bool circleHalfspaceCollisionResponse(PhysicCircle* circle, PhysicHalfSpace* halfspace)
+// NEW: friction-aware collision response with a Halfspace
+bool CircleHalfspaceCollisionResponse(FizziksCircle* circle, FizziksHalfspace* halfspace)
 {
-    Vector2 displacementFromHSPosToCircle = circle->position - halfspace->position;
-    float distance = Vector2DotProduct(displacementFromHSPosToCircle, halfspace->getNormal());
-    Vector2 projectionDisplacementOntoNormal = halfspace->getNormal() * distance;
-    float overlap = circle->radius - distance;
+    Vector2 displacementToCircle = circle->position - halfspace->position;
+    float dot = Vector2DotProduct(displacementToCircle, halfspace->getNormal());
+    Vector2 projectionDisplacementOntoNormal = halfspace->getNormal() * dot;
+    float overlap = circle->radius - dot;
 
-    if (overlap > 0)
+    if (overlap < 0.0f)
     {
-        Vector2 midpoint = halfspace->getNormal() * overlap;
-        circle->position += midpoint;
-        return true;
-    }
-    else
-    {
+
         return false;
     }
-    DrawLineEx(circle->position, halfspace->position, 1, RED);
-    Vector2 midpoint = halfspace->position + displacementFromHSPosToCircle * 0.5f;
-
-    DrawText(TextFormat("D: %6.0f", distance), midpoint.x, midpoint.y, 20, LIGHTGRAY);
 
 
-    return distance < circle->radius;
+    Vector2 mtv = halfspace->getNormal() * overlap; // Stops penetration so the circles dont tunnel through
+    circle->position += mtv;
 
+    // --- 2. Normal force ---
+    Vector2 g = world.accelerationGravity;                 // acceleration due to gravity
+    float gAlongNormal = Vector2DotProduct(g, halfspace->getNormal()); // can be negative
+    float normalMag = -gAlongNormal * circle->mass;        // choose magnitude so it cancels normal component of gravity
+    if (normalMag < 0.0f) normalMag = 0.0f;
+
+    circle->normalForce = halfspace->getNormal() * normalMag;
+
+    // Remove velocity into the surface so it doesn't tunnel
+    float vAlongNormal = Vector2DotProduct(circle->velocity, halfspace->getNormal());
+    if (vAlongNormal < 0.0f)
+    {
+        circle->velocity -= halfspace->getNormal() * vAlongNormal;
+    }
+
+    // --- 3. Friction along the surface --- 
+    // Tangent direction along plane
+    Vector2 tangent = Vector2Rotate(halfspace->getNormal(), PI * 0.5f);
+    float vAlongTangent = Vector2DotProduct(circle->velocity, tangent);
+
+    circle->frictionForce = { 0, 0 };
+
+    if (fabsf(vAlongTangent) > 0.0001f)
+    {
+        // acceleration magnitude from kinetic friction: a_f = μ |g_n|
+        float aFrictionMag = circle->kFriction * fabsf(gAlongNormal);
+        float dv = aFrictionMag * dt;
+
+        float speedT = fabsf(vAlongTangent);
+        float newSpeedT = speedT - dv;
+        if (newSpeedT < 0.0f) newSpeedT = 0.0f;
+
+        float sign = (vAlongTangent > 0.0f) ? 1.0f : -1.0f;
+        float new_vAlongTangent = sign * newSpeedT;
+
+        // change in tangential component
+        circle->velocity += tangent * (new_vAlongTangent - vAlongTangent);
+
+        // friction force vector for drawing: magnitude μN, opposite direction of motion
+        float frictionMag = circle->kFriction * normalMag;
+        circle->frictionForce = tangent * (-sign * frictionMag);
+    }
+
+    return true;
 }
 
 
-class PhysicWorld
-{
-private:
-    unsigned int ObjectCount = 0;
-public:
-    std::vector<PhysicObject*> Object; // All objects in physics simulation
-    //  std::vector<PhysicBox*> Boxes;
-    Vector2 accelerationGravity = { 0, 9 };
-
-    void add(PhysicObject* newObject) // Add to physics simulation
-    {
-        newObject->name = std::to_string(ObjectCount);
-        Object.push_back(newObject);
-        ObjectCount++;
-    }
-
-
-    void update()
-    {
-        for (int i = 0; i < Object.size(); i++)
-        {
-            PhysicObject* obj = Object[i];
-
-            if (obj->isStatic) continue;
-
-
-            obj->position = obj->position + obj->velocity * dt;
-
-
-            obj->velocity = obj->velocity + accelerationGravity * dt;
-        }
-        checkCollisions();
-    }
-
-    void checkCollisions()
-    {
-		for (int i = 0; i < Object.size(); i++)
-        {
-			Object[i]->color = GREEN;
-            
-        }
-
-
-        for (int i = 0; i < Object.size(); i++)
-        {
-            for (int j = i + 1; j < Object.size(); j++)
-            {
-                PhysicObject* objectpointerA = Object[i];
-                PhysicObject* objectpointerB = Object[j];
-
-                phisicShape shapeA = objectpointerA->Shape();
-                phisicShape shapeB = objectpointerB->Shape();
-
-
-				bool didCollide = false;
-
-
-                if (shapeA == CIRCLE && shapeB == CIRCLE)
-                {
-					didCollide = circleColisionResponse((PhysicCircle*)objectpointerA, (PhysicCircle*)objectpointerB);
-                    
-                    
-                }
-                else if (shapeA == CIRCLE && shapeB == HALFSPACE)
-                {
-                   didCollide = circleHalfspaceCollisionResponse((PhysicCircle*)objectpointerA, (PhysicHalfSpace*)objectpointerB);
-                }
-                else if (shapeA == HALFSPACE && shapeB == CIRCLE)
-                {
-				  didCollide = circleHalfspaceCollisionResponse((PhysicCircle*)objectpointerB, (PhysicHalfSpace*)objectpointerA);
-                }
-                if (didCollide)
-                {
-                    objectpointerA->color = RED;
-                    objectpointerB->color = RED;
-                }
-            }
-        }
-    }
-};
-
-
-
-		//Reset all colors
-      /*  for (auto& obj : Object) {
-            PhysicCircle* circle = dynamic_cast<PhysicCircle*>(obj);
-            if (circle) circle->color = circle->originalColor;
-        }
-		//changing color if overlapping
-        for (int i = 0; i < Object.size(); i++)
-        {
-            PhysicCircle* circlePointerA = dynamic_cast<PhysicCircle*>(Object[i]);
-            if (!circlePointerA) continue;
-
-
-
-
-            for (int j = i + 1; j < Object.size(); j++)
-            {
-                PhysicCircle* circlePointerB = dynamic_cast<PhysicCircle*>(Object[j]);
-                if (!circlePointerB) continue;
-
-                if (circleOverlaps(circlePointerA, circlePointerB))
-                {
-                    circlePointerA->color = RED;
-                    circlePointerB->color = RED;
-                }
-
-                
-            }
-
-            //if (circleHalfSpaceOverlaps(circlePointerA, &halfspace))
-            //{
-              //  circlePointerA->color = RED;
-            //}*/
-        //}
-        
-   // }
-//};
-PhysicWorld world;
-PhysicHalfSpace halfspace;
-PhysicHalfSpace halfspace2;
-//Remove objects offscreen
 void cleanup()
 {
-    // checking if the object is offscreen!
-    for (int i = 0; i < world.Object.size(); i++)
+    //For each object, check if it is offscreen!
+    for (int i = 0; i < world.objekts.size(); i++)
     {
-        PhysicObject* obj = world.Object[i];
-
+        FizziksObjekt* objekt = world.objekts[i];
         //Is it offscreen?
-        if (  obj->position.y > GetScreenHeight()
-            || obj->position.y < 0
-            || obj->position.x > GetScreenWidth()
-            || obj->position.x < 0
+        if (objekt->position.y > GetScreenHeight()
+            || objekt->position.y < 0
+            || objekt->position.x > GetScreenWidth()
+            || objekt->position.x < 0
             )
         {
             //Destroy!
-			auto iterator = world.Object.begin() + i;
-			PhysicObject* pointerToPhysicObject = *iterator;
-			delete pointerToPhysicObject;
-            world.Object.erase(iterator);
+            std::vector<FizziksObjekt*>::iterator iterator = (world.objekts.begin() + i);
+            FizziksObjekt* pointerToFizziksObjekt = *iterator;
+            delete pointerToFizziksObjekt;
+
+            world.objekts.erase(iterator);
             i--;
         }
     }
-
 }
+
+// I created this sphere setup struct and array to manage the properties of the first four spheres
+struct SphereSetup
+{
+    Color color;
+    float mass;
+    float kFriction;
+};
+
+const SphereSetup sphereSetups[4] =
+{
+    // Sphere, Mass, kFriction
+    { RED,    2.0f, 0.1f },   // Red
+    { GREEN,  2.0f, 0.8f },   // Green
+    { BLUE,   8.0f, 0.1f },   // Blue
+    { YELLOW, 8.0f, 0.8f }    // Yellow
+};
+
 void update()
 {
-	dt = 1.0f / TARGET_FPS;
-	time += dt;
+    dt = 1.0f / TARGET_FPS;
+    time += dt;
 
-	cleanup();
-	world.update();
+    // Clear per-frame contact forces on all circles
+    for (int i = 0; i < world.objekts.size(); ++i)
+    {
+        if (world.objekts[i]->Shape() == CIRCLE)
+        {
+            FizziksCircle* c = (FizziksCircle*)world.objekts[i];
+            c->normalForce = { 0,0 };
+            c->frictionForce = { 0,0 };
+        }
+    }
 
-	if (IsKeyPressed(KEY_SPACE))
-	{
-		PhysicCircle* newBird = new PhysicCircle();//new kryword
-        newBird->position = launchPosition;
-		newBird->velocity = { launchSpeed * (float)cos(launchAngle * DEG2RAD), -launchSpeed * (float)sin(launchAngle * DEG2RAD) };
-		
-		
-		newBird->radius = (rand() % 26) + 5; 
-		//Color randomColor = {rand() % 256 , rand() % 256, rand() % 256, 255};
-		//newBird->color = randomColor;
-        newBird->color = GREEN;
-        newBird->originalColor = GREEN;
+    cleanup();
+    world.update();
 
-		world.add(newBird);
-	}
+    static int spawnIndex = 0;
+
+    if (IsKeyPressed(KEY_SPACE))
+    {
+        FizziksCircle* newBall = new FizziksCircle();
+        newBall->position = startPos;
+        newBall->velocity = { speed * (float)cos(angle * DEG2RAD),
+                              -speed * (float)sin(angle * DEG2RAD) };
+
+        // Use assignment table for first 4 spheres, then fall back to random
+        if (spawnIndex < 4)
+        {
+            const SphereSetup& setup = sphereSetups[spawnIndex];
+            newBall->radius = 25.0f;         // fixed radius
+            newBall->mass = setup.mass;
+            newBall->kFriction = setup.kFriction;
+            newBall->color = setup.color;
+        }
+        else
+        {
+            // After the 4 required spheres, allow random extra ones
+            newBall->radius = (rand() % 26) + 5; // radius from 5-30
+            Color randomColor = { rand() % 256 , rand() % 256, rand() % 256, 255 };
+            newBall->color = randomColor;
+            newBall->mass = 2.0f;
+            newBall->kFriction = 0.3f;
+        }
+
+        world.add(newBall);
+        spawnIndex++;
+    }
 }
 
-void Draw()
+
+void draw()
 {
     BeginDrawing();
     ClearBackground(BLACK);
+    DrawText("Earl Fabian 101554213", 10, float(GetScreenHeight() - 30), 20, LIGHTGRAY);
 
-    DrawText("Amir Abolhassani 101541841", 10, float(GetScreenHeight() - 30), 20, LIGHTGRAY);
+    GuiSliderBar(Rectangle{ 10, 15, 1000, 20 }, "", TextFormat("%.2f", time), &time, 0, 240);
 
-    
-    GuiSliderBar(Rectangle{ 70, 5, 200, 10 }, "Launch X", TextFormat("%.0f", launchPosition.x), &launchPosition.x, 0, GetScreenWidth());
-    GuiSliderBar(Rectangle{ 70, 25, 200, 10 }, "Launch Y", TextFormat("%.0f", launchPosition.y), &launchPosition.y, 0, GetScreenHeight());
-    GuiSliderBar(Rectangle{ 70, 45, 200, 10 }, "Angle", TextFormat("%.1f", launchAngle), &launchAngle, 0, 360);
-    GuiSliderBar(Rectangle{ 70, 65, 200, 10 }, "Speed", TextFormat("%.1f", launchSpeed), &launchSpeed, 0, 1000);
-    GuiSliderBar(Rectangle{ 70,85,200, 10}, "Gravity Y", TextFormat("Gravity Y: %.0f Px/sec^2", world.accelerationGravity.y), &world.accelerationGravity.y, -1000, 1000);
+    GuiSliderBar(Rectangle{ 10, 40, 500, 30 }, "Speed", TextFormat("Speed: %.0f", speed), &speed, -1000, 1000);
 
-    DrawText(TextFormat("Object: %i", world.Object.size()), 500,20, 50, LIGHTGRAY);
+    GuiSliderBar(Rectangle{ 10, 80, 500, 30 }, "Angle", TextFormat("Angle: %.0f Degrees", angle), &angle, -180, 180);
+
+    GuiSliderBar(Rectangle{ 10, 120, 500, 30 }, "Gravity Y", TextFormat("Gravity Y: %.0f Px/sec^2", world.accelerationGravity.y), &world.accelerationGravity.y, -1000, 1000);
+
+    DrawText(TextFormat("Obects: %i", world.objekts.size()), 10, 160, 30, LIGHTGRAY);
 
     DrawText(TextFormat("T: %6.2f", time), GetScreenWidth() - 140, 10, 30, LIGHTGRAY);
 
-    Vector2 velocityVec = { launchSpeed * cos(launchAngle * DEG2RAD), -launchSpeed * sin(launchAngle * DEG2RAD) };
-    DrawLineEx(launchPosition, Vector2Add(launchPosition, velocityVec), 3, RED);
+    Vector2 velocity = { speed * cos(angle * DEG2RAD), -speed * sin(angle * DEG2RAD) };
 
-	//Halfspace surface  
-    GuiSliderBar(Rectangle{ 70, 105, 200, 10 }, "HalfSpace x", TextFormat("%.0f", halfspace.position.x), &halfspace.position.x, 0, GetScreenWidth());
-    GuiSliderBar(Rectangle{ 70, 125, 200, 10 }, "HalfSpace Y", TextFormat("%.0f", halfspace.position.y), &halfspace.position.y, 0, GetScreenHeight());
+    DrawLineEx(startPos, startPos + velocity, 3, RED);
 
-	float halfSpaceRoatation = halfspace.getRoatation();
-    GuiSliderBar(Rectangle{ 70, 145, 200, 10 }, "HS Roatition", TextFormat("%.0f", halfspace.getRoatation()), &halfSpaceRoatation, -360,360 );
+    //Controls for halfspace
+    GuiSliderBar(Rectangle{ 80, 200, 240, 30 }, "X", TextFormat("%.0f", halfspace.position.x), &halfspace.position.x, 0, GetScreenWidth());
+    GuiSliderBar(Rectangle{ 380, 200, 240, 30 }, "Y", TextFormat("%.0f", halfspace.position.y), &halfspace.position.y, 0, GetScreenHeight());
 
-	halfspace.setRotationDegrees(halfSpaceRoatation);
-
-    //Second halfspace controls
-    GuiSliderBar(Rectangle{ 70, 165, 200, 10 }, "HalfSpace2 x", TextFormat("%.0f", halfspace2.position.x), &halfspace2.position.x, 0, GetScreenWidth());
-    GuiSliderBar(Rectangle{ 70, 185, 200, 10 }, "HalfSpace2 Y", TextFormat("%.0f", halfspace2.position.y), &halfspace2.position.y, 0, GetScreenHeight());
-
-    float halfSpace2Roatation = halfspace2.getRoatation();
-    GuiSliderBar(Rectangle{ 70, 205, 200, 10 }, "HS2 Roatition", TextFormat("%.0f", halfspace2.getRoatation()), &halfSpace2Roatation, -360, 360);
-
-    halfspace2.setRotationDegrees(halfSpace2Roatation);
+    float halfspaceRotation = halfspace.getRotation();
+    GuiSliderBar(Rectangle{ 700, 200, 200, 30 }, "Rotation", TextFormat("%.0f", halfspace.getRotation()), &halfspaceRotation, -360, 360);
+    halfspace.setRotationDegrees(halfspaceRotation);
 
     //Draw all physics objects!
-    for (int i = 0; i < world.Object.size(); i++)
+    for (int i = 0; i < world.objekts.size(); i++)
     {
-        world.Object[i]->draw();
+        world.objekts[i]->draw();
     }
-	halfspace.draw();
 
     EndDrawing();
-
 }
+
 
 int main()
 {
-    InitWindow(InitialWidth, InitialHeight, "Angry bird beta, Amir Abolhassani 101541841");
+    InitWindow(InitialWidth, InitialHeight, "GAME2005 Earl Fabian 101554213");
     SetTargetFPS(TARGET_FPS);
-	halfspace.isStatic = true;
-	halfspace.position = { 500, 700 };
-	halfspace.setRotationDegrees(10);
-	world.add(&halfspace);
-	halfspace2.isStatic = true;
-	halfspace2.position = { 800, 400 };
-	halfspace2.setRotationDegrees(-10);
-	world.add(&halfspace2);
 
-    while (!WindowShouldClose()) // Loops TARGET_FPS times per second
+    halfspace.isStatic = true;
+    halfspace.position = { 200, 700 };
+    halfspace.setRotationDegrees(-30);
+    world.add(&halfspace);
+
+    halfspace2.isStatic = true;
+    halfspace2.position = { 400, 800 };
+    halfspace2.setRotationDegrees(30);
+    world.add(&halfspace2);
+
+    startPos = { 100, GetScreenHeight() - 500.0f };
+
+    while (!WindowShouldClose())
     {
         update();
-        Draw();
+        draw();
     }
 
     CloseWindow();
