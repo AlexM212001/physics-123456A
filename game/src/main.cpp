@@ -15,6 +15,8 @@ See documentation here: https://www.raylib.com/, and examples here: https://www.
 const unsigned int TARGET_FPS = 50; //frames/second
 float dt = 1.0f / TARGET_FPS;      //seconds/frame
 float time = 0;
+float restitution = 0.9f; // bounciness coefficient for all object
+
 
 enum FizziksShape
 {
@@ -36,6 +38,9 @@ public:
     Vector2 position = { 0,0 };
     Vector2 velocity = { 0,0 };
     float mass = 1; // in kg
+	float grippiness = 0.1f; 
+	float bounciness = 1.3f;
+
 
     std::string name = "objekt";
     Color color = RED;
@@ -217,7 +222,7 @@ public:
 
 
 FizziksHalfspace halfspace;
-FizziksHalfspace halfspace2;
+//FizziksHalfspace halfspace2;
 
 bool CircleCircleOverlap(FizziksCircle* circleA, FizziksCircle* circleB) // returns true if circles are overlapping
 {
@@ -241,18 +246,35 @@ bool CircleCircleCollisionResponse(FizziksCircle* circleA, FizziksCircle* circle
     float sumOfRadii = circleA->radius + circleB->radius;
     float overlap = sumOfRadii - distance;
 
-    if (overlap > 0)
+    if (overlap >=0)
     {
-        Vector2 normalAtoB;
-        if (fabsf(distance) < 0.0001f)
-            normalAtoB = { 0,1 };
-        else
-            normalAtoB = displacementFromAToB / distance;
+        Vector2 normal = displacementFromAToB / distance;
 
-        Vector2 mtv = normalAtoB * overlap; //minimum translation vector
+        Vector2 mtv = normal * overlap; //minimum translation vector
 
         circleA->position -= mtv * 0.5f;
         circleB->position += mtv * 0.5f;
+
+        Vector2 velocityBRelativeToA = circleB->velocity - circleA->velocity;
+        float closingVelocity1D = Vector2DotProduct(velocityBRelativeToA, normal);
+        if (closingVelocity1D >= 0) return true;
+        float restitution = circleA ->bounciness * circleB->bounciness;
+        float totalMass = circleA->mass + circleB->mass;
+
+        float impulseMagnitude = ((1.0f + restitution) * closingVelocity1D * circleA->mass * circleB->mass) / totalMass;
+        Vector2 impulseForB = normal * -impulseMagnitude;
+        Vector2 impulseForA = normal * impulseMagnitude;
+        //apply impulse
+        circleA->velocity += impulseForA / circleA->mass;
+        circleB->velocity += impulseForB / circleB->mass;
+
+
+
+
+
+
+
+
         return true;
     }
     else
@@ -333,6 +355,28 @@ bool CircleHalfspaceCollisionResponse(FizziksCircle* circle, FizziksHalfspace* h
         float frictionMag = circle->kFriction * normalMag;
         circle->frictionForce = tangent * (-sign * frictionMag);
     }
+
+
+    //bouncing
+    /*Vector2 velocityBRelativeToA = circleB->velocity - circleA->velocity;
+    float closingVelocity1D = Vector2DotProduct(velocityBRelativeToA, normal);
+    if (closingVelocity1D >= 0) return true;
+    
+    float totalMass = circleA->mass + circleB->mass;
+
+    float impulseMagnitude = ((1.0f + restitution) * closingVelocity1D * circleA->mass * circleB->mass) / totalMass;
+    Vector2 impulseForB = normal * -impulseMagnitude;
+    Vector2 impulseForA = normal * impulseMagnitude;
+    //apply impulse
+    circleA->velocity += impulseForA / circleA->mass;
+    circleB->velocity += impulseForB / circleB->mass;*/
+
+    float closingVelocity1D = Vector2DotProduct(circle-> velocity, halfspace -> getNormal());
+    if (closingVelocity1D >= 0) return true;
+    float restitution = circle -> bounciness * halfspace -> bounciness;
+    circle->velocity += halfspace-> getNormal()* circle->velocity * -(1.0f + restitution);
+
+
 
     return true;
 }
@@ -462,6 +506,8 @@ void draw()
     GuiSliderBar(Rectangle{ 700, 200, 200, 30 }, "Rotation", TextFormat("%.0f", halfspace.getRotation()), &halfspaceRotation, -360, 360);
     halfspace.setRotationDegrees(halfspaceRotation);
 
+	GuiSliderBar(Rectangle{ 80, 300, 200, 30 }, "restitution", TextFormat("%.2f", restitution), &restitution, 0.0f, 1.0f);
+
     //Draw all physics objects!
     for (int i = 0; i < world.objekts.size(); i++)
     {
@@ -482,10 +528,10 @@ int main()
     halfspace.setRotationDegrees(-30);
     world.add(&halfspace);
 
-    halfspace2.isStatic = true;
-    halfspace2.position = { 400, 800 };
-    halfspace2.setRotationDegrees(30);
-    world.add(&halfspace2);
+  //  halfspace2.isStatic = true;
+   // halfspace2.position = { 400, 800 };
+   // halfspace2.setRotationDegrees(30);
+  //  world.add(&halfspace2);
 
     startPos = { 100, GetScreenHeight() - 500.0f };
 
