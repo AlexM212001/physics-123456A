@@ -520,7 +520,7 @@ void draw()
 
 int main()
 {
-    InitWindow(InitialWidth, InitialHeight, "GAME2005 Earl Fabian 101554213");
+    InitWindow(InitialWidth, InitialHeight, "GAME2005 AMIR 101541841");
     SetTargetFPS(TARGET_FPS);
 
     halfspace.isStatic = true;
